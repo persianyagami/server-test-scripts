@@ -2,35 +2,30 @@
 
 # shellcheck disable=SC1090
 . "$(dirname "$0")/helper/test_helper.sh"
+. "$(dirname "$0")/helper/common_vars.sh"
 
 # cheat sheet:
 #  assertTrue $?
-#  assertEquals 1 2
+#  assertEquals ["explanation"] 1 2
 #  oneTimeSetUp()
 #  oneTimeTearDown()
 #  setUp() - run before each test
 #  tearDown() - run after each test
 
-# The name of the temporary docker network we will create for the
-# tests.
-readonly DOCKER_PREFIX=oci_memcached_test
-readonly DOCKER_NETWORK="${DOCKER_PREFIX}_network"
-readonly DOCKER_IMAGE="squeakywheel/memcached:edge"
-
 oneTimeSetUp() {
     # Make sure we're using the latest OCI image.
-    docker pull --quiet "$DOCKER_IMAGE" > /dev/null
+    docker pull --quiet "${DOCKER_IMAGE}" > /dev/null
 
     # Cleanup stale resources
     tearDown
     oneTimeTearDown
 
     # Setup network
-    docker network create $DOCKER_NETWORK > /dev/null 2>&1
+    docker network create "$DOCKER_NETWORK" > /dev/null 2>&1
 }
 
 oneTimeTearDown() {
-        docker network rm $DOCKER_NETWORK > /dev/null 2>&1
+        docker network rm "$DOCKER_NETWORK" > /dev/null 2>&1
 }
 
 tearDown() {
@@ -47,7 +42,7 @@ docker_run_server() {
        --rm \
        -d \
        --name "${DOCKER_PREFIX}_${suffix}" \
-       $DOCKER_IMAGE \
+       "${DOCKER_IMAGE}" \
        memcached \
        "$@"
 }
@@ -136,7 +131,7 @@ test_data_storage_and_retrieval() {
     docker exec "$container_client" sh -c "echo '$data' > /tmp/test_data"
     docker exec "$container_client" memccp --servers="${DOCKER_PREFIX}_server" /tmp/test_data
     retr_data=$(docker exec "$container_client" memccat --servers="${DOCKER_PREFIX}_server" test_data)
-    assertEquals "$data" "$retr_data"
+    assertEquals "Store/retrieve data" "$data" "$retr_data"
 }
 
 load_shunit2

@@ -2,22 +2,21 @@
 
 # shellcheck disable=SC1090
 . "$(dirname "$0")/helper/test_helper.sh"
+. "$(dirname "$0")/helper/common_vars.sh"
 
 # cheat sheet:
 #  assertTrue $?
-#  assertEquals 1 2
+#  assertEquals ["explanation"] 1 2
 #  oneTimeSetUp()
 #  oneTimeTearDown()
 #  setUp() - run before each test
 #  tearDown() - run after each test
 
-readonly DOCKER_PREFIX=oci_telegraf_test
-readonly DOCKER_IMAGE="squeakywheel/telegraf:edge"
 readonly TELEGRAF_PORT=9273
 
 oneTimeSetUp() {
     # Make sure we're using the latest OCI image.
-    docker pull --quiet "$DOCKER_IMAGE" > /dev/null
+    docker pull --quiet "${DOCKER_IMAGE}" > /dev/null
 
     # Cleanup stale resources
     tearDown
@@ -41,7 +40,7 @@ docker_run_telegraf() {
 	   -d \
 	   --name "${DOCKER_PREFIX}_${suffix}" \
 	   "$@" \
-	   $DOCKER_IMAGE
+	   "${DOCKER_IMAGE}"
 }
 
 wait_telegraf_container_ready() {
@@ -60,6 +59,7 @@ test_telegraf_up() {
     # "localhost:9273", and we don't want to specify any custom
     # configuration file here.
     container=$(docker_run_telegraf --network host)
+    assertNotNull "Failed to start the container" "${container}" || return 1
     wait_telegraf_container_ready "${container}" || return 1
 
     debug "Verifying that we can access the web endpoint"
@@ -83,6 +83,7 @@ test_telegraf_custom_config_http_endpoint() {
     container=$(docker_run_telegraf \
 		    --network=host \
 		    -v "$PWD"/telegraf_test_data/telegraf.conf:/etc/telegraf/telegraf.conf)
+    assertNotNull "Failed to start the container" "${container}" || return 1
     wait_telegraf_container_ready "${container}" || return 1
 
     # Listen to telegraf.

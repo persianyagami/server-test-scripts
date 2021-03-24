@@ -2,24 +2,21 @@
 
 # shellcheck disable=SC1090
 . "$(dirname "$0")/helper/test_helper.sh"
+. "$(dirname "$0")/helper/common_vars.sh"
 
 # cheat sheet:
 #  assertTrue $?
-#  assertEquals 1 2
+#  assertEquals ["explanation"] 1 2
 #  oneTimeSetUp()
 #  oneTimeTearDown()
 #  setUp() - run before each test
 #  tearDown() - run after each test
 
-# The name of the temporary docker network we will create for the
-# tests.
-readonly DOCKER_PREFIX=oci_apache2_test
-readonly DOCKER_IMAGE="squeakywheel/apache2:edge"
 readonly LOCAL_PORT=59080
 
 oneTimeSetUp() {
     # Make sure we're using the latest OCI image.
-    docker pull --quiet "$DOCKER_IMAGE" > /dev/null
+    docker pull --quiet "${DOCKER_IMAGE}" > /dev/null
 
     # Cleanup stale resources
     tearDown
@@ -39,7 +36,7 @@ docker_run_server() {
        -d \
        --name "${DOCKER_PREFIX}_${suffix}" \
        "$@" \
-       $DOCKER_IMAGE
+       "${DOCKER_IMAGE}"
 }
 
 wait_apache2_container_ready() {
@@ -70,7 +67,7 @@ test_default_config_ipv6() {
 
 test_static_content() {
     debug "Creating all-defaults apache2 container"
-    test_data_wwwroot="$PWD/apache2_test_data/html"
+    test_data_wwwroot="$(realpath -e $(dirname "$0"))/apache2_test_data/html"
     container=$(docker_run_server -p "$LOCAL_PORT:80" -v "$test_data_wwwroot:/var/www/html:ro")
 
     assertNotNull "Failed to start the container" "${container}" || return 1
@@ -79,13 +76,13 @@ test_static_content() {
     orig_checksum=$(md5sum "$test_data_wwwroot/test.txt" | awk '{ print $1 }')
     retrieved_checksum=$(curl -sS http://127.0.0.1:$LOCAL_PORT/test.txt | md5sum | awk '{ print $1 }')
 
-    assertEquals "${orig_checksum}" "${retrieved_checksum}"
+    assertEquals "Checksum mismatch in retrieved test.txt" "${orig_checksum}" "${retrieved_checksum}"
 }
 
 test_custom_config() {
     debug "Creating apache2 container with custom config"
-    custom_config="$PWD/apache2_test_data/apache2_simple.conf"
-    test_data_wwwroot="$PWD/apache2_test_data/html"
+    custom_config="$(realpath -e $(dirname "$0"))/apache2_test_data/apache2_simple.conf"
+    test_data_wwwroot="$(realpath -e $(dirname "$0"))/apache2_test_data/html"
     container=$(docker_run_server -p "$LOCAL_PORT:80" -v "$custom_config:/etc/apache2/apache2.conf:ro" -v "$test_data_wwwroot:/srv/www:ro")
 
     assertNotNull "Failed to start the container" "${container}" || return 1
@@ -94,7 +91,7 @@ test_custom_config() {
     orig_checksum=$(md5sum "$test_data_wwwroot/index.html" | awk '{ print $1 }')
     retrieved_checksum=$(curl -sS "http://127.0.0.1:$LOCAL_PORT" | md5sum | awk '{ print $1 }')
 
-    assertEquals "${orig_checksum}" "${retrieved_checksum}"
+    assertEquals "Checksum mismatch in retrieved index.hml" "${orig_checksum}" "${retrieved_checksum}"
 }
 
 

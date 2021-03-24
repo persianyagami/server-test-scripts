@@ -2,36 +2,36 @@
 
 # shellcheck disable=SC1090
 . "$(dirname "$0")/helper/test_helper.sh"
+. "$(dirname "$0")/helper/common_vars.sh"
 
 # cheat sheet:
 #  assertTrue $?
-#  assertEquals 1 2
+#  assertEquals ["explanation"] 1 2
 #  oneTimeSetUp()
 #  oneTimeTearDown()
 #  setUp() - run before each test
 #  tearDown() - run after each test
 
-# The name of the temporary docker network we will create for the
-# tests.
-readonly DOCKER_PREFIX=oci_prometheus_test
-readonly DOCKER_NETWORK="${DOCKER_PREFIX}_network"
-readonly DOCKER_IMAGE="squeakywheel/prometheus:edge"
-readonly DOCKER_ALERTMANAGER_IMAGE="squeakywheel/prometheus-alertmanager:edge"
 readonly DOCKER_PUSHGATEWAY_IMAGE="prom/pushgateway"
 readonly PROM_PORT=50000
 readonly ALERTMANAGER_PORT=50001
 readonly PUSHGATEWAY_PORT=50002
 
+if [ -z "${DOCKER_ALERTMANAGER_IMAGE}" ]; then
+    # If undefined, guess by deriving from $DOCKER_IMAGE's name
+    DOCKER_ALERTMANAGER_IMAGE=$(echo "$DOCKER_IMAGE" | sed 's/prometheus:/prometheus-alertmanager:/')
+fi
+
 oneTimeSetUp() {
     # Make sure we're using the latest OCI image.
-    docker pull --quiet "$DOCKER_IMAGE" > /dev/null
+    docker pull --quiet "${DOCKER_IMAGE}" > /dev/null
 
     # Cleanup stale resources
     tearDown
     oneTimeTearDown
 
     # Setup network
-    docker network create $DOCKER_NETWORK > /dev/null 2>&1
+    docker network create "$DOCKER_NETWORK" > /dev/null 2>&1
 }
 
 setUp() {
@@ -39,7 +39,7 @@ setUp() {
 }
 
 oneTimeTearDown() {
-    docker network rm $DOCKER_NETWORK > /dev/null 2>&1
+    docker network rm "$DOCKER_NETWORK" > /dev/null 2>&1
 }
 
 tearDown() {
@@ -56,30 +56,30 @@ tearDown() {
 # It accepts extra arguments.
 docker_run_prom() {
     docker run \
-	   --network $DOCKER_NETWORK \
+	   --network "$DOCKER_NETWORK" \
 	   --rm \
 	   -d \
 	   --publish ${PROM_PORT}:9090 \
 	   --name "${DOCKER_PREFIX}_${suffix}" \
 	   "$@" \
-	   $DOCKER_IMAGE
+	   "${DOCKER_IMAGE}"
 }
 
 # Helper function to execute alertmanager.
 docker_run_alertmanager() {
     docker run \
-	   --network $DOCKER_NETWORK \
+	   --network "$DOCKER_NETWORK" \
 	   --rm \
 	   -d \
 	   --publish ${ALERTMANAGER_PORT}:9093 \
 	   --name "${DOCKER_PREFIX}_alertmanager_${suffix}" \
-	   $DOCKER_ALERTMANAGER_IMAGE
+	   "$DOCKER_ALERTMANAGER_IMAGE"
 }
 
 # Helper function to execute pushgateway.
 docker_run_pushgateway() {
     docker run \
-	   --network $DOCKER_NETWORK \
+	   --network "$DOCKER_NETWORK" \
 	   --rm \
 	   -d \
 	   --publish ${PUSHGATEWAY_PORT}:9091 \
@@ -108,7 +108,7 @@ wait_pushgateway_container_ready() {
 test_cli() {
     debug "Check prometheus help via CLI"
     temp_dir=$(mktemp -d)
-    docker run --rm --name "${DOCKER_PREFIX}_${suffix}" squeakywheel/prometheus:edge --help 2>"${temp_dir}/prom_help"
+    docker run --rm --name "${DOCKER_PREFIX}_${suffix}" ubuntu/prometheus:edge --help 2>"${temp_dir}/prom_help"
     out=$(cat "${temp_dir}/prom_help") && ret=1
     if echo "${out}" | grep "The Prometheus monitoring server" >/dev/null; then
         ret=0
@@ -120,6 +120,7 @@ test_cli() {
 test_default_target() {
     debug "Creating prometheus container"
     container=$(docker_run_prom)
+    assertNotNull "Failed to start the container" "${container}" || return 1
     wait_prometheus_container_ready "${container}" || return 1
 
     # Give some time for prometheus to check the health status of the target.
@@ -150,6 +151,7 @@ alerting:
       - ${alertmanager_url}
 EOF
     container=$(docker_run_prom --volume "${temp_dir}/prometheus.yml:/etc/prometheus/prometheus.yml")
+    assertNotNull "Failed to start the container" "${container}" || return 1
     wait_prometheus_container_ready "${container}" || return 1
 
     debug "Check if the alertmanager is configured"
@@ -180,6 +182,7 @@ groups:
 EOF
     container=$(docker_run_prom --volume "${temp_dir}/prometheus.yml:/etc/prometheus/prometheus.yml" \
                                 --volume "${temp_dir}/alerts.yml:/etc/prometheus/alerts.yml")
+    assertNotNull "Failed to start the container" "${container}" || return 1
     wait_prometheus_container_ready "${container}" || return 1
 
     debug "Check if the alert is active"
@@ -235,6 +238,7 @@ scrape_configs:
 EOF
     container=$(docker_run_prom --mount source="${volume}",target=/prometheus \
                                 --volume "${temp_dir}/prometheus.yml:/etc/prometheus/prometheus.yml")
+    assertNotNull "Failed to start the container" "${container}" || return 1
     wait_prometheus_container_ready "${container}" || return 1
 
     debug "Submit a dummy metric to pushgateway"
@@ -256,6 +260,7 @@ EOF
     debug "Start a new prometheus container using the same volume"
     container=$(docker_run_prom --mount source="${volume}",target=/prometheus \
                                 --volume "${temp_dir}/prometheus.yml:/etc/prometheus/prometheus.yml")
+    assertNotNull "Failed to start the container" "${container}" || return 1
     wait_prometheus_container_ready "${container}" || return 1
 
     debug "Check dummy metric in the new prometheus container"

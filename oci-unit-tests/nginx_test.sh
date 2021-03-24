@@ -2,35 +2,30 @@
 
 # shellcheck disable=SC1090
 . "$(dirname "$0")/helper/test_helper.sh"
+. "$(dirname "$0")/helper/common_vars.sh"
 
 # cheat sheet:
 #  assertTrue $?
-#  assertEquals 1 2
+#  assertEquals ["explanation"] 1 2
 #  oneTimeSetUp()
 #  oneTimeTearDown()
 #  setUp() - run before each test
 #  tearDown() - run after each test
 
-# The name of the temporary docker network we will create for the
-# tests.
-readonly DOCKER_PREFIX=oci_nginx_test
-readonly DOCKER_NETWORK="${DOCKER_PREFIX}_network"
-readonly DOCKER_IMAGE="squeakywheel/nginx:edge"
-
 oneTimeSetUp() {
     # Make sure we're using the latest OCI image.
-    docker pull --quiet "$DOCKER_IMAGE" > /dev/null
+    docker pull --quiet "${DOCKER_IMAGE}" > /dev/null
 
     # Cleanup stale resources
     tearDown
     oneTimeTearDown
 
     # Setup network
-    docker network create $DOCKER_NETWORK > /dev/null 2>&1
+    docker network create "$DOCKER_NETWORK" > /dev/null 2>&1
 }
 
 oneTimeTearDown() {
-        docker network rm $DOCKER_NETWORK > /dev/null 2>&1
+        docker network rm "$DOCKER_NETWORK" > /dev/null 2>&1
 }
 
 tearDown() {
@@ -43,18 +38,19 @@ tearDown() {
 docker_run_server() {
     suffix=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | fold -w 8 | head -n 1)
     docker run \
-       --network $DOCKER_NETWORK \
+       --network "$DOCKER_NETWORK" \
        --rm \
        -d \
        --name "${DOCKER_PREFIX}_${suffix}" \
        "$@" \
-       $DOCKER_IMAGE
+       "${DOCKER_IMAGE}"
 }
 
 wait_nginx_container_ready() {
     local container="${1}"
     local log="Configuration complete"
     wait_container_ready "${container}" "${log}"
+    sleep 10
 }
 
 test_default_config() {
@@ -88,7 +84,7 @@ test_static_files() {
     orig_checksum=$(md5sum "$test_data_wwwroot/test.txt" | awk '{ print $1 }')
     retrieved_checksum=$(curl -sS http://127.0.0.1:48080/test.txt | md5sum | awk '{ print $1 }')
 
-    assertEquals "${orig_checksum}" "${retrieved_checksum}"
+    assertEquals "Checksum mismatch from retrieved test.txt" "${orig_checksum}" "${retrieved_checksum}"
 }
 
 test_static_files_read_only_mode() {
@@ -103,7 +99,7 @@ test_static_files_read_only_mode() {
     orig_checksum=$(md5sum "$test_data_wwwroot/test.txt" | awk '{ print $1 }')
     retrieved_checksum=$(curl -sS http://127.0.0.1:48080/test.txt | md5sum | awk '{ print $1 }')
 
-    assertEquals "${orig_checksum}" "${retrieved_checksum}"
+    assertEquals "Checksum mismatch from retrieved test.txt" "${orig_checksum}" "${retrieved_checksum}"
 
     rm -rf "$nginx_scratch"
 }
@@ -120,7 +116,7 @@ test_custom_config() {
     orig_checksum=$(md5sum "$test_data_wwwroot/index.html" | awk '{ print $1 }')
     retrieved_checksum=$(curl -sS http://127.0.0.1:48080/ | md5sum | awk '{ print $1 }')
 
-    assertEquals "${orig_checksum}" "${retrieved_checksum}"
+    assertEquals "Checksum mismatch from retrieved index.html" "${orig_checksum}" "${retrieved_checksum}"
 }
 
 test_reverse_proxy() {
@@ -139,7 +135,7 @@ test_reverse_proxy() {
     assertNotNull "Failed to start the container" "${rp_container}" || return 1
     wait_nginx_container_ready "${rp_container}" || return 1
     retrieved_checksum=$(curl -sS http://127.0.0.1:48070/test.txt | md5sum | awk '{ print $1 }')
-    assertEquals "${orig_checksum}" "${retrieved_checksum}"
+    assertEquals "Checksum mismatch from retrieved test.txt" "${orig_checksum}" "${retrieved_checksum}"
 }
 
 

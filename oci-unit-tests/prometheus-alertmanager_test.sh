@@ -2,24 +2,21 @@
 
 # shellcheck disable=SC1090
 . "$(dirname "$0")/helper/test_helper.sh"
+. "$(dirname "$0")/helper/common_vars.sh"
 
 # cheat sheet:
 #  assertTrue $?
-#  assertEquals 1 2
+#  assertEquals ["explanation"] 1 2
 #  oneTimeSetUp()
 #  oneTimeTearDown()
 #  setUp() - run before each test
 #  tearDown() - run after each test
 
-# The name of the temporary docker network we will create for the
-# tests.
-readonly DOCKER_PREFIX=oci_alertmanager_test
-readonly DOCKER_IMAGE="squeakywheel/prometheus-alertmanager:edge"
 readonly ALERTMANAGER_PORT=60001
 
 oneTimeSetUp() {
     # Make sure we're using the latest OCI image.
-    docker pull --quiet "$DOCKER_IMAGE" > /dev/null
+    docker pull --quiet "${DOCKER_IMAGE}" > /dev/null
 
     # Cleanup stale resources
     tearDown
@@ -43,7 +40,7 @@ docker_run_alertmanager() {
 	   -d \
 	   --publish ${ALERTMANAGER_PORT}:9093 \
 	   --name "${DOCKER_PREFIX}_${suffix}" \
-	   $DOCKER_IMAGE
+	   "${DOCKER_IMAGE}"
 }
 
 wait_alertmanager_container_ready() {
@@ -55,6 +52,7 @@ wait_alertmanager_container_ready() {
 test_fire_an_alert() {
     debug "Creating alertmanager container"
     container=$(docker_run_alertmanager)
+    assertNotNull "Failed to start the container" "${container}" || return 1
     wait_alertmanager_container_ready "${container}" || return 1
 
     debug "Triggering alert"
